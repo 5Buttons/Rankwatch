@@ -60,6 +60,7 @@ local RankWatch_Rank1_Allowed = {
 
 local RankWatch_RankMaxMinusOne_Allowed = {
 	[(GetSpellInfo(2120))] = true,	-- Mages use a downranked flamestrike for an optimal AOE rotation
+	[(GetSpellInfo(13813))] =true,  -- Explosive trap
 }
 
 local RankWatch_AnyRank_Allowed = {
@@ -69,7 +70,6 @@ local RankWatch_AnyRank_Allowed = {
 	[(GetSpellInfo(587))] = true,	-- Downranked Conjured Food is sometimes used to give to lower level players.
 	[(GetSpellInfo(5504))] = true,	-- same with Conjured Water
 	[(GetSpellInfo(42955))] = true,	-- and Conjured Refreshment
-	[(GetSpellInfo(13813))] =true,  -- Explosive trap
 }
 
 -- For buffs and HoTs, it's the target's level that matters, not the caster's

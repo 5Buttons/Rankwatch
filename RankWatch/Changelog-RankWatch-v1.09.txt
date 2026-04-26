@@ -1,0 +1,125 @@
+------------------------------------------------------------------------
+r16 | gronzig | 2010-01-24 16:05:20 +0000 (Sun, 24 Jan 2010) | 1 line
+Changed paths:
+   A /tags/v1.09 (from /trunk:15)
+
+Tagging as v1.09
+------------------------------------------------------------------------
+r15 | gronzig | 2010-01-24 16:00:41 +0000 (Sun, 24 Jan 2010) | 4 lines
+Changed paths:
+   M /trunk/README.txt
+   M /trunk/RankWatch.lua
+   M /trunk/RankWatch.toc
+
+Don't put a message in local chat when the downranking user is on the ignore list.
+Add Power Word: Shield to the list of spells determined by minimum of target level and caster level
+Fix times in "/rankwatch report" output
+Fix a problem in code designed to prevent double whispers when there are multiple rankwatch users in the group
+------------------------------------------------------------------------
+r14 | gronzig | 2010-01-11 06:20:29 +0000 (Mon, 11 Jan 2010) | 1 line
+Changed paths:
+   M /trunk/RankWatch.lua
+
+Add paladin blessings to target-level list
+------------------------------------------------------------------------
+r12 | gronzig | 2010-01-06 17:11:05 +0000 (Wed, 06 Jan 2010) | 1 line
+Changed paths:
+   M /trunk/README.txt
+   M /trunk/RankWatch.lua
+   M /trunk/RankWatch.toc
+
+Fix nasty bug in reporting (drycoding ftl)
+------------------------------------------------------------------------
+r10 | gronzig | 2010-01-06 08:52:34 +0000 (Wed, 06 Jan 2010) | 1 line
+Changed paths:
+   M /trunk/RankWatch.lua
+
+simplify code a bit
+------------------------------------------------------------------------
+r9 | gronzig | 2010-01-05 19:54:19 +0000 (Tue, 05 Jan 2010) | 4 lines
+Changed paths:
+   M /trunk/Locales/Locale-enUS.lua
+   M /trunk/README.txt
+   M /trunk/RankData.lua
+   M /trunk/RankWatch.lua
+
+Report uses of obsolete spells when a better replacement is available: Demon Skin, Lesser Heal, Heal, Frost Armor, Rockbiter Weapon, Aspect of the Monkey, Aspect of the Hawk, Abolish Poison
+Add Conjure Water, Food, Refreshement to the list of any-rank exceptions.
+Detect downranked Rogue poisons.
+
+------------------------------------------------------------------------
+r8 | gronzig | 2010-01-05 03:56:21 +0000 (Tue, 05 Jan 2010) | 4 lines
+Changed paths:
+   M /trunk/Locales/Locale-enUS.lua
+   M /trunk/README.txt
+   M /trunk/RankWatch.lua
+
+Do not report players below level 80 until their spells are a full level out of date.
+Add Thorns to the list of spells determined by the level of the target.
+Use SpellIDs instead of spell names for exceptions list to avoid the need to localize them
+Localize a few strings that were missed on the original pass
+------------------------------------------------------------------------
+r7 | gronzig | 2010-01-04 16:57:46 +0000 (Mon, 04 Jan 2010) | 1 line
+Changed paths:
+   M /trunk/Locales/Locale-enUS.lua
+   M /trunk/RankWatch.lua
+
+Add Hellfire, Amplify Magic, and Dampen Magic to rank 1 special cases
+------------------------------------------------------------------------
+r6 | gronzig | 2010-01-04 16:44:20 +0000 (Mon, 04 Jan 2010) | 2 lines
+Changed paths:
+   M /trunk/RankWatch.lua
+
+Add Hellfire, Amplify Magic, and Dampen Magic to rank 1 special cases
+Do not whisper players below level 80 until the spell is a whole level out of date.
+------------------------------------------------------------------------
+r5 | gronzig | 2010-01-04 15:32:21 +0000 (Mon, 04 Jan 2010) | 1 line
+Changed paths:
+   M /trunk/README.txt
+
+Update with credits for translators
+------------------------------------------------------------------------
+r4 | gronzig | 2010-01-03 17:34:26 +0000 (Sun, 03 Jan 2010) | 1 line
+Changed paths:
+   M /trunk/Locales/Locale-deDE.lua
+   M /trunk/Locales/Locale-esES.lua
+   M /trunk/Locales/Locale-esMX.lua
+   M /trunk/Locales/Locale-frFR.lua
+   M /trunk/Locales/Locale-koKR.lua
+   M /trunk/Locales/Locale-ruRU.lua
+   M /trunk/Locales/Locale-zhCN.lua
+
+Comments to point to curseforge localization page
+------------------------------------------------------------------------
+r2 | gronzig | 2010-01-03 08:21:05 +0000 (Sun, 03 Jan 2010) | 1 line
+Changed paths:
+   A /trunk/.pkgmeta
+   A /trunk/LICENSE.txt
+   A /trunk/Locales
+   A /trunk/Locales/Locale-deDE.lua
+   A /trunk/Locales/Locale-enUS.lua
+   A /trunk/Locales/Locale-esES.lua
+   A /trunk/Locales/Locale-esMX.lua
+   A /trunk/Locales/Locale-frFR.lua
+   A /trunk/Locales/Locale-koKR.lua
+   A /trunk/Locales/Locale-ruRU.lua
+   A /trunk/Locales/Locale-zhCN.lua
+   A /trunk/Locales/Locale-zhTW.lua
+   A /trunk/Locales/Locales.xml
+   A /trunk/README.txt
+   A /trunk/RankData.lua
+   A /trunk/RankWatch.lua
+   A /trunk/RankWatch.toc
+   A /trunk/RankWatch.xml
+   A /trunk/embeds.xml
+
+Import 1.07b1 from wowinterface
+------------------------------------------------------------------------
+r1 | root | 2009-11-25 14:49:10 +0000 (Wed, 25 Nov 2009) | 1 line
+Changed paths:
+   A /branches
+   A /tags
+   A /trunk
+
+"rankwatch/mainline: Initial Import"
+------------------------------------------------------------------------

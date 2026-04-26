@@ -1,0 +1,71 @@
+﻿--
+-- To translate, go to http://wow.curseforge.com/addons/rankwatch/localization/koKR/
+--
+local L = LibStub("AceLocale-3.0"):NewLocale("RankWatch", "koKR", false);
+if not L then return end
+
+L["About"] = "About" -- Requires localization
+L["ADD_BOILERPLATE"] = "RankWatch will send a short explanation the first time a player is whispered." -- Requires localization
+L["ALREADY_NOTIFIED"] = "Not going to whisper %s about %s because %s already did." -- Requires localization
+L["ANY_LEVEL"] = "players of any level" -- Requires localization
+L["DATE_FORMAT"] = "%m/%d/%y %H:%M:%S" -- Requires localization
+L["IGNORED_PLAYERS"] = "RankWatch will ignore spells cast by the following players: " -- Requires localization
+L["INVALID_COMMAND"] = "Invalid command - use '/rankwatch help' if you need help" -- Requires localization
+L["LEVEL_80_ONLY"] = "level 80 players only" -- Requires localization
+L["LOCAL_SPELL_LOW"] = "RankWatch saw %s use %s Rank %d (max rank at level %d is %d) at %s." -- Requires localization
+L["LOCAL_SPELL_REPLACED"] = "RankWatch saw %s use %s Rank %d (replaced at level %d by %s Rank %d) at %s." -- Requires localization
+L["NO_BOILERPLATE"] = "RankWatch will not send a short explanation the first time a player is whispered." -- Requires localization
+L["NOONE_IGNORED"] = "RankWatch is not ignoring anyone." -- Requires localization
+L["NOREPORT_DOWNRANKED"] = "RankWatch will no longer report downranked spells" -- Requires localization
+L["NOT_REPORT_INTERVAL"] = "RankWatch will not report any player regarding any one spell more often than each %s seconds." -- Requires localization
+L["ON_IGNORE_LIST"] = "Not going to whisper %s about %s because %s has him on the ignore list." -- Requires localization
+L["PLAYER_ALREADY_IGNORED"] = "RankWatch is already ignoring spells cast by %s." -- Requires localization
+L["PLAYER_ALREADY_WATCHED"] = "RankWatch is already watching spells cast by %s." -- Requires localization
+L["PLAYER_NOW_IGNORED"] = "RankWatch will ignore spells cast by %s." -- Requires localization
+L["PLAYER_NOW_WATCHED"] = "RankWatch will watch spells cast by %s." -- Requires localization
+L["RANKWATCH_CHANNEL_NOWHISPERS"] = "RankWatch will not whisper any player automatically." -- Requires localization
+L["RANKWATCH_CHANNEL_PARTY"] = "RankWatch will report %s who use downranked spells in party/raid/bg chat." -- Requires localization
+L["RANKWATCH_CHANNEL_SAY"] = "RankWatch will report %s who use downranked spells with /say." -- Requires localization
+L["RANKWATCH_CHANNEL_WHISPER"] = "RankWatch will whisper %s who use downranked spells." -- Requires localization
+L["RANKWATCH_CHANNEL_WHISPER_EXPLAIN"] = "RankWatch will whisper a short explanation the first time a player is seen to use a downranked spell." -- Requires localization
+L["RANKWATCH_CHANNEL_WHISPER_NOEXPLAIN"] = "RankWatch will not whisper an explanation the first time a player is seen to use a downranked spell." -- Requires localization
+L["RANKWATCH_DISABLED"] = "RankWatch is disabled." -- Requires localization
+L["RANKWATCH_ENABLED"] = "RankWatch is enabled." -- Requires localization
+L["RANKWATCH_REPORT_LINE_LOW"] = "%s rank %d (max rank at level %d is %d) at %s" -- Requires localization
+L["RANKWATCH_REPORT_LINE_REPLACED"] = "%s rank %d (replaced at level %d by %s rank %d) at %s" -- Requires localization
+L["RANKWATCH_REPORT_NONE_SEEN"] = "RankWatch has not seen any downranked spells." -- Requires localization
+L["RANKWATCH_WELCOME_DISABLED"] = "RankWatch %s disabled.  Type '/rankwatch enable' to enable it." -- Requires localization
+L["RANKWATCH_WELCOME_ENABLED"] = "RankWatch %s enabled.  Type /rankwatch for more information." -- Requires localization
+L["REPORT_ALL_LEVELS"] = "RankWatch will report all levels who use downranked spells." -- Requires localization
+L["REPORT_DOWNRANKED"] = "RankWatch will now report downranked spells" -- Requires localization
+L["REPORT_GROUP_CHAT"] = "RankWatch will report players who use downranked spells in party/raid/bg chat." -- Requires localization
+L["REPORT_ONLY_80"] = "RankWatch will report only level 80 players who use downranked spells." -- Requires localization
+L["REPORT_ONLY_SELF"] = "RankWatch will report downranked spells only in your chat window." -- Requires localization
+L["REPORT_SAY"] = "RankWatch will report players who use downranked spells with /say." -- Requires localization
+L["REPORT_SEEN"] = "RankWatch has seen the following downranked spells:" -- Requires localization
+L["REPORT_WHISPER"] = "RankWatch will whisper players who use downranked spells." -- Requires localization
+L["SEEN_LIST_CLEARED"] = "RankWatch's list of recently seen downranked spells has been cleared." -- Requires localization
+L["__URL__"] = "http://wow.curse.com/downloads/wow-addons/details/rankwatch.aspx" -- Requires localization
+L["USAGE_01"] = "RankWatch %s help:" -- Requires localization
+L["USAGE_02"] = "   /rankwatch enable          - enables RankWatch" -- Requires localization
+L["USAGE_03"] = "   /rankwatch disable         - disables RankWatch" -- Requires localization
+L["USAGE_04"] = "   /rankwatch report          - reports recently seen downranked spells" -- Requires localization
+L["USAGE_05"] = "   /rankwatch clear           - clears the list of recently seen downranked spells" -- Requires localization
+L["USAGE_06"] = "   /rankwatch 80              - report only level 80 players who use downranked spells" -- Requires localization
+L["USAGE_07"] = "   /rankwatch all             - report all levels who use downranked spells" -- Requires localization
+L["USAGE_08"] = "   /rankwatch whisper         - whisper players who use downranked spells (doesn't work in cross-realm dungeons)" -- Requires localization
+L["USAGE_09"] = "   /rankwatch party           - report players who use downranked spells in party/raid/bg chat" -- Requires localization
+L["USAGE_10"] = "   /rankwatch say             - report players who use downranked spells with /say" -- Requires localization
+L["USAGE_11"] = "   /rankwatch none            - report downranked spells only in your chat window" -- Requires localization
+L["USAGE_12"] = "   /rankwatch explain enable  - first-time whispers include a short explanation" -- Requires localization
+L["USAGE_13"] = "   /rankwatch explain disable - first-time whispers will not include a short explanation" -- Requires localization
+L["USAGE_14"] = "   /rankwatch interval <seconds> - minimum time between whispers to the same person regarding the same spell" -- Requires localization
+L["USAGE_15"] = "   /rankwatch ignore          - list players on the ignore list" -- Requires localization
+L["USAGE_16"] = "   /rankwatch ignore <name>   - never report spells cast by that player" -- Requires localization
+L["USAGE_17"] = "   /rankwatch watch <name>    - no longer ignore spells cast by that player" -- Requires localization
+L["Version"] = "Version" -- Requires localization
+L["WHISPER_BOILERPLATE_PART1"] = "If you trained %s rank %d, make sure it's on your bars - there's a bug if you train while dual-specced, it does not update your other spec's bars." -- Requires localization
+L["WHISPER_BOILERPLATE_PART2"] = "If you did intend to use a downranked spell, my apologies - tell me, and I will make RankWatch never send you a message again." -- Requires localization
+L["WHISPER_SPELL_LOW_WARNING"] = "[RankWatch] %s used %s Rank %d.  Max rank at level %d is %d." -- Requires localization
+L["WHISPER_SPELL_REPLACED_WARNING"] = "[RankWatch] %s used %s Rank %d, which is replaced at level %d by %s Rank %d." -- Requires localization
+

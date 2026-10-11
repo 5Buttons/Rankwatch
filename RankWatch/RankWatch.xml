@@ -6,9 +6,9 @@
   <Script file="RankWatch.lua"/>
   <Frame name="RankWatchFrame">
     <Scripts>
-      <OnLoad> RankWatch_OnLoad(); </OnLoad>
+      <OnLoad> RankWatch_OnLoad(self); </OnLoad>
       <OnEvent> RankWatch_OnEvent(self, event, ...); </OnEvent>
-      <OnUpdate> RankWatch_OnUpdate(); </OnUpdate>
+      <OnUpdate> RankWatch_OnUpdate(self, elapsed); </OnUpdate>
   </Scripts>
   </Frame>
 </Ui>

@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 RankWatch will monitor the spells cast by members of your party or raid and warn them
 if they are using a downranked spell.
 
@@ -34,15 +34,11 @@ local L = LibStub("AceLocale-3.0"):GetLocale("RankWatch")
 
 local RankWatch_Version = "v1.09"
 
-local RANKWATCH_PRIORITY_IS_ME = 9999
-local RANKWATCH_PRIORITY_IGNORE = RANKWATCH_PRIORITY_IS_ME - 1
-local RANKWATCH_PRIORITY_MAX = RANKWATCH_PRIORITY_IGNORE - 1
-
 local RANKWATCH_CHANNEL_DISABLED = false
 local RANKWATCH_CHANNEL_PARTY = 1
 local RANKWATCH_CHANNEL_SAY = 2
 local RANKWATCH_CHANNEL_WHISPER = 3
-		
+
 local RANKWATCH_WHISPER_80 = 1
 local RANKWATCH_WHISPER_ALL = 2
 
@@ -98,21 +94,63 @@ local RankWatch_Target_Level = {
 }
 
 local _G = getfenv(0)
-local band = _G.bit.band
+local band, bor = _G.bit.band, _G.bit.bor
+
+local MAX_LEVEL = 80
+
+-- Messages use a new prefix; reports from RankWatch v1.09 ("RankWatch" prefix) use an incompatible format.
+local COMM_PREFIX = "RankWatch2"
+
+-- Only look at casts by ourselves and our party/raid members
+local GROUP_FILTER = bor(COMBATLOG_OBJECT_AFFILIATION_MINE, COMBATLOG_OBJECT_AFFILIATION_PARTY, COMBATLOG_OBJECT_AFFILIATION_RAID)
+
+local QUEUE_INTERVAL = 5	-- seconds between attempts to send queued whispers
+local HELLO_THROTTLE = 10	-- minimum seconds between our HELLO broadcasts
+local TARGET_LEVEL_GAP = 8	-- casts on group members more than this many levels below the caster are not checked
 
 RankWatchSettings = {
 	enabled = true,
 	levels = RANKWATCH_WHISPER_ALL,
 	channel = RANKWATCH_CHANNEL_WHISPER,
-	checkAllLevels = true,
-	delay = 3,
 	explain = true,
-	interval = 300,
 	reports = {},
-	ignore = {}
+	ignore = {},
+	announced = {},	-- ["name-level-spellId"] = true, every downrank we (or another RankWatch user) have reported
+	explained = {}	-- [lowercase name] = true, players who already got the explanation whisper
 }
 
-local queuedReports = { }
+-- Map every spell in RankWatch_RankData to the first rank of its chain, so all ranks of an ability share a key
+local familyOf = {}
+do
+	local hasPrevious = {}
+	for _, data in pairs(RankWatch_RankData) do
+		if data.next then
+			hasPrevious[data.next] = true
+		end
+	end
+	for spellId in pairs(RankWatch_RankData) do
+		if not hasPrevious[spellId] then
+			local id = spellId
+			while id and not familyOf[id] do
+				familyOf[id] = spellId
+				id = RankWatch_RankData[id].next
+			end
+		end
+	end
+end
+
+local session = {
+	notifiedFamilies = {},	-- ["name-familyId"] = true, report each ability family once per session
+	levelSeen = {}			-- [name] = level at the first downrank seen this session
+}
+
+local whisperQueue = {}		-- whispers waiting until we and the target are out of combat
+local users = {}			-- other RankWatch users in our group: [name] = true if they are willing to whisper
+local leadOverride = nil	-- set by "/rankwatch lead"
+local wasInGroup = false
+local lastHello = 0
+local helloPending = nil
+local sinceTick, sinceQueue = 0, 0
 
 function RankWatch_ChatMsg(msg)
 		DEFAULT_CHAT_FRAME:AddMessage(msg)
@@ -136,11 +174,11 @@ function SlashCmdList.RANKWATCH(msg, editbox)
 		chat(L["USAGE_11"])
 		chat(L["USAGE_12"])
 		chat(L["USAGE_13"])
-		chat(L["USAGE_14"])
 		chat(L["USAGE_15"])
 		chat(L["USAGE_16"])
 		chat(L["USAGE_17"])
-		
+		chat(L["USAGE_LEAD"])
+
 		if RankWatchSettings.enabled then
 			chat(L["RANKWATCH_ENABLED"])
 			local whisperLevel = L["ANY_LEVEL"]
@@ -163,48 +201,65 @@ function SlashCmdList.RANKWATCH(msg, editbox)
 			else
 				chat(L["RANKWATCH_CHANNEL_WHISPER_NOEXPLAIN"])
 			end
-			
-			if RankWatchSettings.channel then
-				chat(string.format(L["NOT_REPORT_INTERVAL"],RankWatchSettings.interval))
-			end
 		else
 			chat(L["RANKWATCH_DISABLED"])
+		end
+
+		if RankWatch_GetPartyType() then
+			local lead = RankWatch_GetLead()
+			if lead then
+				chat(string.format(L["CURRENT_LEAD"], lead))
+			else
+				chat(L["NO_LEAD"])
+			end
 		end
 	elseif (msg == "enable") then
 		RankWatchSettings.enabled = true
 		chat(L["REPORT_DOWNRANKED"])
+		RankWatch_RequestHello(0)
 	elseif (msg == "disable") then
 		RankWatchSettings.enabled = false
 		chat(L["NOREPORT_DOWNRANKED"])
+		RankWatch_RequestHello(0)
 	elseif (msg == "report") then
 		RankWatch_Report()
 	elseif (msg == "clear") then
 		RankWatchSettings.reports = { }
+		RankWatchSettings.announced = { }
+		RankWatchSettings.explained = { }
+		session.notifiedFamilies = { }
+		session.levelSeen = { }
 		chat(L["SEEN_LIST_CLEARED"])
 	elseif (msg == "80" or msg == "whisper 80") then
 		RankWatchSettings.levels = RANKWATCH_WHISPER_80
 		chat(L["REPORT_ONLY_80"])
 		if not RankWatchSettings.channel then
 			RankWatchSettings.channel = RANKWATCH_CHANNEL_WHISPER
+			RankWatch_RequestHello(0)
 		end
 	elseif (msg == "all" or msg == "whisper all") then
 		RankWatchSettings.levels = RANKWATCH_WHISPER_ALL
 		chat(L["REPORT_ALL_LEVELS"])
 		if not RankWatchSettings.channel then
 			RankWatchSettings.channel = RANKWATCH_CHANNEL_WHISPER
+			RankWatch_RequestHello(0)
 		end
 	elseif (msg == "whisper disable" or msg == "whisper none" or msg == "none") then
 		RankWatchSettings.channel = RANKWATCH_CHANNEL_DISABLED
 		chat(L["REPORT_ONLY_SELF"])
+		RankWatch_RequestHello(0)
 	elseif (msg == "party") then
 		RankWatchSettings.channel = RANKWATCH_CHANNEL_PARTY
 		chat(L["REPORT_GROUP_CHAT"])
+		RankWatch_RequestHello(0)
 	elseif (msg == "say") then
 		RankWatchSettings.channel = RANKWATCH_CHANNEL_SAY
 		chat(L["REPORT_SAY"])
+		RankWatch_RequestHello(0)
 	elseif (msg == "whisper") then
 		RankWatchSettings.channel = RANKWATCH_CHANNEL_WHISPER
 		chat(L["REPORT_WHISPER"])
+		RankWatch_RequestHello(0)
 	elseif (msg == "explain enable") then
 		RankWatchSettings.explain = true
 		chat(L["ADD_BOILERPLATE"])
@@ -213,8 +268,8 @@ function SlashCmdList.RANKWATCH(msg, editbox)
 		chat(L["NO_BOILERPLATE"])
 	elseif (msg == "ignore") then
 		RankWatch_ReportIgnoreList()
-	elseif (msg:match("^interval *%d+$")) then
-		RankWatchSettings.interval = tonumber(msg:match("^interval *(%d+)$"))
+	elseif (msg == "lead") then
+		RankWatch_TakeLead()
 	elseif (msg:match("^ignore ")) then
 		local player = msg:match("^ignore (.*)")
 		RankWatch_Ignore(player)
@@ -245,111 +300,260 @@ function RankWatch_GetSpellInfo(spellId)
 	return spellName, spellRankNum
 end
 
-function RankWatch_OnUpdate()
+-- How many levels a player may lag behind a newly available rank before it is reported.
+-- Leveling players get some slack, since they can't visit a trainer every level.
+function RankWatch_LevelSlack(level)
+	if level >= MAX_LEVEL or level < 10 then
+		return 0
+	elseif level < 20 then
+		return 3
+	elseif level < MAX_LEVEL - 10 then
+		return 2
+	else
+		return 1
+	end
+end
 
-	-- For each spell in queuedReports, if the delay time has elapsed since it was queued
-	-- then report it and remove it from the queue.
-	
-	for sourceName, spells in pairs(queuedReports) do
-		for spellName, spellData in pairs(spells) do
-			if spellData.qtime + RankWatchSettings.delay < GetTime() then
-				if spellData.isMine then
-					RankWatch_Whisper(sourceName, spellName, spellData.lowId, spellData.maxId, spellData.time, spellData.isFirstTime)
-				elseif spellData.priority == RANKWATCH_PRIORITY_IGNORE then
-					chat(string.format(L["ON_IGNORE_LIST"],sourceName,spellName,spellData.sender))
-				elseif spellData.priority <= RANKWATCH_PRIORITY_MAX then
-					chat(string.format(L["ALREADY_NOTIFIED"],sourceName,spellName,spellData.sender ))
-				end
-				spells[spellName] = nil
+local function IsInMyGroup(name)
+	return name == UnitName("player") or UnitInRaid(name) or UnitInParty(name)
+end
+
+--------------------------------------------------------------------------------
+-- Group coordination
+--
+-- RankWatch users in a group announce themselves with HELLO. Exactly one of them, the lead,
+-- sends the whispers: the alphabetically first user who is willing to whisper, unless someone
+-- took the lead with "/rankwatch lead". Every user broadcasts what it detects (REPORT), so the
+-- lead also whispers about casts it was too far away to see, and nobody whispers twice.
+--------------------------------------------------------------------------------
+
+local function SendComm(msg)
+	local channel = RankWatch_GetPartyType()
+	if channel then
+		SendAddonMessage(COMM_PREFIX, msg, channel)
+	end
+end
+
+function RankWatch_CanWhisper()
+	return (RankWatchSettings.enabled and RankWatchSettings.channel) and true or false
+end
+
+local function IsLeadCandidate(name)
+	if name == UnitName("player") then
+		return RankWatch_CanWhisper()
+	end
+	return users[name]
+end
+
+function RankWatch_GetLead()
+	if leadOverride and IsLeadCandidate(leadOverride) then
+		return leadOverride
+	end
+	local lead = nil
+	if RankWatch_CanWhisper() then
+		lead = UnitName("player")
+	end
+	for name, canWhisper in pairs(users) do
+		if canWhisper and (not lead or name < lead) then
+			lead = name
+		end
+	end
+	return lead
+end
+
+function RankWatch_SendHello()
+	lastHello = GetTime()
+	helloPending = nil
+	SendComm("HELLO\t" .. (RankWatch_CanWhisper() and "1" or "0") .. "\t" .. (leadOverride or ""))
+end
+
+-- Batch HELLOs: several triggers within the throttle window result in a single broadcast
+function RankWatch_RequestHello(delay)
+	local at = math.max(GetTime() + delay, lastHello + HELLO_THROTTLE)
+	if not helloPending or at < helloPending then
+		helloPending = at
+	end
+end
+
+function RankWatch_TakeLead()
+	if not RankWatch_CanWhisper() then
+		chat(L["LEAD_UNAVAILABLE"])
+		return
+	end
+	leadOverride = UnitName("player")
+	SendComm("LEAD\t" .. leadOverride)
+	chat(L["LEAD_TAKEN"])
+end
+
+function RankWatch_OnRosterChanged()
+	local inGroup = RankWatch_GetPartyType() ~= nil
+	if not inGroup then
+		users = {}
+		leadOverride = nil
+	else
+		for name in pairs(users) do
+			if not IsInMyGroup(name) then
+				users[name] = nil
 			end
+		end
+		if not wasInGroup then
+			-- We just joined; existing members answer our HELLO with their own
+			RankWatch_RequestHello(2)
+		end
+	end
+	wasInGroup = inGroup
+end
+
+function RankWatch_OnComm(message, sender)
+	-- Addon messages to the group are echoed back to the sender
+	if sender == UnitName("player") then return end
+
+	local command, a, b, c, d, e = strsplit("\t", message)
+	if command == "HELLO" then
+		local isNew = users[sender] == nil
+		users[sender] = (a == "1")
+		if b and b ~= "" then
+			leadOverride = b
+		end
+		if isNew then
+			RankWatch_RequestHello(1)
+		end
+	elseif command == "LEAD" then
+		if a and a ~= "" then
+			leadOverride = a
+		end
+	elseif command == "REPORT" then
+		local sourceName, level, lowId, maxId = a, tonumber(b), tonumber(c), tonumber(d)
+		if sourceName and level and RankWatch_RankData[lowId] and RankWatch_RankData[maxId] then
+			RankWatch_HandleDetection(sourceName, level, lowId, maxId, e == "1")
 		end
 	end
 end
 
-function RankWatch_OnLoad() 
-  this:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED");
-  this:RegisterEvent("ADDON_LOADED");
-  this:RegisterEvent("CHAT_MSG_ADDON");
+--------------------------------------------------------------------------------
+-- Detection and notification
+--------------------------------------------------------------------------------
+
+-- Handles a downranked spell seen by us or reported by another RankWatch user.
+-- Returns true if it had not been reported before.
+-- suppress: the reporting user has the caster on their ignore list, so nobody should whisper them.
+function RankWatch_HandleDetection(sourceName, sourceLevel, lowId, maxId, suppress)
+	local key = sourceName .. "-" .. sourceLevel .. "-" .. lowId
+	local familyKey = sourceName .. "-" .. familyOf[lowId]
+	if RankWatchSettings.announced[key] or session.notifiedFamilies[familyKey] then
+		return false
+	end
+	RankWatchSettings.announced[key] = true
+	session.notifiedFamilies[familyKey] = true
+
+	local lowRankName, lowRank = RankWatch_GetSpellInfo(lowId)
+	local maxRankName, maxRank = RankWatch_GetSpellInfo(maxId)
+	local spellLevel = RankWatch_RankData[maxId].level
+	local now = time()
+
+	if not RankWatchSettings.reports[sourceName] then
+		RankWatchSettings.reports[sourceName] = {}
+	end
+	RankWatchSettings.reports[sourceName][lowRankName] = { time = now, lowId = lowId, maxId = maxId }
+
+	local ignored = RankWatchSettings.ignore[sourceName:lower()]
+	if not ignored then
+		if lowRankName == maxRankName then
+			chat(string.format(L["LOCAL_SPELL_LOW"],sourceName,lowRankName,lowRank,spellLevel,maxRank,date(L["DATE_FORMAT"], now)));
+		else
+			chat(string.format(L["LOCAL_SPELL_REPLACED"],sourceName,lowRankName,lowRank,spellLevel,maxRankName,maxRank,date(L["DATE_FORMAT"], now)));
+		end
+	end
+
+	-- Players running RankWatch are told by their own copy
+	if not suppress and not ignored and users[sourceName] == nil and sourceName ~= UnitName("player")
+			and RankWatch_GetLead() == UnitName("player") then
+		table.insert(whisperQueue, { name = sourceName, lowId = lowId, maxId = maxId })
+	end
+	return true
+end
+
+function RankWatch_ProcessQueue()
+	if #whisperQueue == 0 or InCombatLockdown() or UnitIsDeadOrGhost("player") then return end
+
+	local retry = {}
+	for _, entry in ipairs(whisperQueue) do
+		if UnitAffectingCombat(entry.name) then
+			table.insert(retry, entry)
+		else
+			RankWatch_Whisper(entry.name, entry.lowId, entry.maxId)
+		end
+	end
+	whisperQueue = retry
+end
+
+function RankWatch_OnUpdate(self, elapsed)
+	sinceTick = sinceTick + elapsed
+	if sinceTick < 1 then return end
+	sinceQueue = sinceQueue + sinceTick
+	sinceTick = 0
+
+	if helloPending and GetTime() >= helloPending then
+		RankWatch_SendHello()
+	end
+
+	if sinceQueue >= QUEUE_INTERVAL then
+		sinceQueue = 0
+		RankWatch_ProcessQueue()
+	end
+end
+
+function RankWatch_OnLoad(self)
+  self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED");
+  self:RegisterEvent("ADDON_LOADED");
+  self:RegisterEvent("CHAT_MSG_ADDON");
+  self:RegisterEvent("PLAYER_ENTERING_WORLD");
+  self:RegisterEvent("PARTY_MEMBERS_CHANGED");
+  self:RegisterEvent("RAID_ROSTER_UPDATE");
 end
 
 function RankWatch_OnEvent(self, event, ...)
 	if event == "CHAT_MSG_ADDON" then
 		local prefix, message, _, sender = ...
-		if prefix == "RankWatch" then
-	
-			-- We received a message from another RankWatch user saying they observed a downranked spell.
-
-			local sourceName, spellName, nr, mr, t, isFirstTime, ns = message:match("([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)")
-			local timestamp = tonumber(t)
-			local priority = tonumber(ns)
-			if not queuedReports[sourceName] then
-				queuedReports[sourceName] = { }
-			end
-			
-			local qr = queuedReports[sourceName][spellName]
-			if qr then
-
-				-- There's already a queued report for this spell from this source waiting to be reported.
-
-				if qr.priority < priority then
-					-- They have a bigger "priority" so they will report it if it needs to be reported.
-					queuedReports[sourceName][spellName].priority = priority
-					queuedReports[sourceName][spellName].isMine = false
-					queuedReports[sourceName][spellName].sender = sender
-				elseif qr.isFirstTime and not isFirstTime then
-					-- They have sent the "first time" whisper, so we shouldn't
-					queuedReports[sourceName][spellName].isFirstTime = false
-				end
-			else
-				-- They saw something that we didn't, or haven't yet.
-				queuedReports[sourceName][spellName] = {
-					priority = priority, time = timestamp,
-					isFirstTime = isFirstTime, isMine = false, sender = sender, qtime = GetTime()
-				}
-			end
+		if prefix == COMM_PREFIX then
+			RankWatch_OnComm(message, sender)
 		end
+	elseif event == "PARTY_MEMBERS_CHANGED" or event == "RAID_ROSTER_UPDATE" then
+		RankWatch_OnRosterChanged()
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		-- also covers /reload while in a group
+		wasInGroup = false
+		RankWatch_OnRosterChanged()
 	elseif event == "ADDON_LOADED" then
 		local addonName = ...;
 		if addonName:lower() == "rankwatch" then
-			
-			-- Save their old setting if they've modified it
-			if RankWatchSettings.repeatInterval then
-				if not RankWatchSettings.interval and RankWatchSettings.repeatInterval > 120 then
-					RankWatchSettings.interval = RankWatchSettings.repeatInterval
-				end
-				RankWatchSettings["repeatInterval"] = nil
-			end
-			
-			if not RankWatchSettings.interval then
-				RankWatchSettings.interval = 300
-			end
-			
+
+			-- Settings from older versions which are no longer used
+			RankWatchSettings.repeatInterval = nil
+			RankWatchSettings.interval = nil
+			RankWatchSettings.delay = nil
+			RankWatchSettings.checkAllLevels = nil
+			RankWatchSettings.whisperAllLevels = nil
+
 			if type(RankWatchSettings.channel) == "nil" then
 				RankWatchSettings.channel = RANKWATCH_CHANNEL_WHISPER
 			end
-			
+
 			if not RankWatchSettings.levels then
 				RankWatchSettings.levels = RANKWATCH_WHISPER_ALL
-			end
-			
-			if not RankWatchSettings.delay then
-				RankWatchSettings.delay = 3
-			end
-			
-			if type(RankWatchSettings.checkAllLevels) == "nil" then
-				RankWatchSettings.checkAllLevels = true
-			end
-
-			if type(RankWatchSettings.whisperAllLevels) == "nil" then
-				RankWatchSettings.whisperAllLevels = false
 			end
 
 			-- if the setting doesn't exist, then the default is true
 			if type(RankWatchSettings.explain) == "nil" then
 				RankWatchSettings.explain = true
 			end
-			
-			-- Make sure the keys are all lowercase			
+
+			RankWatchSettings.reports = RankWatchSettings.reports or {}
+			RankWatchSettings.ignore = RankWatchSettings.ignore or {}
+			RankWatchSettings.announced = RankWatchSettings.announced or {}
+			RankWatchSettings.explained = RankWatchSettings.explained or {}
+
+			-- Make sure the keys are all lowercase
 			local newIgnore = {}
 			for k, v in pairs(RankWatchSettings.ignore) do
 				if type(v) == "string" then
@@ -359,7 +563,7 @@ function RankWatch_OnEvent(self, event, ...)
 				end
 			end
 			RankWatchSettings.ignore = newIgnore
-				
+
 			if RankWatchSettings.enabled then
 				chat(string.format(L["RANKWATCH_WELCOME_ENABLED"], RankWatch_Version))
 				RankWatch_ReportIgnoreList()
@@ -368,77 +572,82 @@ function RankWatch_OnEvent(self, event, ...)
 			end
 		end
 	elseif (event == "COMBAT_LOG_EVENT_UNFILTERED") then
-		local timestamp, combatEvent, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags = 
+		if not RankWatchSettings.enabled or UnitInBattleground("player") then return end
+
+		local timestamp, combatEvent, sourceGUID, sourceName, sourceFlags, destGUID, destName, destFlags, spellId, spellName =
 		...; -- Those arguments appear for all combat event variants.
 
-		-- We only want to look at players who are level 80
-		-- and at RANGE and SPELL_??? events
-		-- because those are the only ones that have a rank
+		-- Only SPELL_??? events have a rank, and we only care about players in our group
+		if not sourceName
+				or band(sourceFlags, COMBATLOG_OBJECT_TYPE_MASK) ~= COMBATLOG_OBJECT_TYPE_PLAYER
+				or band(sourceFlags, GROUP_FILTER) == 0
+				or not combatEvent:match("^SPELL")
+				or combatEvent == "SPELL_AURA_REMOVED" then
+			return
+		end
 
-		if (band(sourceFlags, COMBATLOG_OBJECT_TYPE_MASK) == COMBATLOG_OBJECT_TYPE_PLAYER)
-			and combatEvent:match("^SPELL")
-			and combatEvent ~= "SPELL_AURA_REMOVED"
-			and (RankWatchSettings.checkAllLevels or UnitLevel(sourceName) == 80) then
+		-- RankWatch_RankData contains rank, level, and (if there is a higher rank) the spellID of the next higher rank.
+		local spellData = RankWatch_RankData[spellId]
+		if not spellData then return end
 
-			-- The first ninth and tenth arguments describe the spell or ability dealing damage.
-			local spellId, spellName = select(9, ...); -- Everything from 9th argument in ... onward
-			local sourceLevel = UnitLevel(sourceName)
-			
-			-- Don't complain about people still leveling who just dinged.
-			if sourceLevel < 80 and sourceName ~= UnitName("player") then
-				sourceLevel = sourceLevel - 1
+		-- Players who are mind controlled or charmed don't choose their spells
+		if UnitIsCharmed(sourceName) or (UnitIsPossessed and UnitIsPossessed(sourceName))
+				or UnitIsEnemy("player", sourceName) then
+			return
+		end
+		if sourceName == UnitName("player") and not HasFullControl() then return end
+
+		local casterLevel = UnitLevel(sourceName) or 0
+		if casterLevel <= 0 then return end
+
+		-- Casts on much lower level group members (e.g. buffing a leveling friend) are not checked.
+		-- UnitLevel returns 0 for players outside the group and for NPCs.
+		local destLevel = destName and UnitLevel(destName) or 0
+		if destLevel > 0 and destLevel < casterLevel - TARGET_LEVEL_GAP then return end
+
+		local sourceLevel = casterLevel - RankWatch_LevelSlack(casterLevel)
+
+		-- If we're buffing or HoTting someone lower level than us, then the level of the target
+		-- determines the level of the buff or HoT which is applied.
+		if RankWatch_Target_Level[spellName] and destName then
+			local destUnit = destName
+			if (UnitName("target")) == destName then
+				-- this makes UnitLevel work when the target is not in our group but is our target
+				destUnit = "target"
 			end
-			
-			-- If we're buffing or HoTting someone lower level than us, then the level of the target
-			-- determines the level of the buff or HoT which is applied.
-			if RankWatch_Target_Level[spellName] then
-				if (UnitName("target")) == destName then
-					-- this makes UnitLevel work when the target is not in our group but is our target
-					destName = "target"
-				end
-				if destName and UnitLevel(destName) < sourceLevel then
-					sourceLevel = UnitLevel(destName)
-				end
+			local level = UnitLevel(destUnit) or 0
+			if level <= 0 then return end -- target level unknown
+			if level < sourceLevel then
+				sourceLevel = level
 			end
-			
-			-- RankWatch_RankData contains rank, level, and (if there is a higher rank) the spellID of the next higher rank.
-			local spellData = RankWatch_RankData[spellId];
+		end
 
-			if spellData then
-				local maxRankId = spellId
-				local maxRankData = spellData
-				while (maxRankData.next and RankWatch_RankData[maxRankData.next].level <= sourceLevel) do
-					maxRankId = maxRankData.next
-					maxRankData = RankWatch_RankData[maxRankData.next]
-				end
-				
-				-- Some spells are downranked for legitimate reasons. Don't report these spells.
-				if (spellData.rank == 1 and RankWatch_Rank1_Allowed[spellName])
-						or (spellData.rank == maxRankData.rank - 1 and RankWatch_RankMaxMinusOne_Allowed[spellName])
-						or RankWatch_AnyRank_Allowed[spellName] then
-					maxRankId = spellId
-				end
-				
-				if maxRankId ~= spellId then
-					local isFirstTime = false
-					if (not RankWatchSettings.reports[sourceName]) then
-						RankWatchSettings.reports[sourceName] = {}
-						isFirstTime = true
-					end
-					
-					local lastReport = RankWatchSettings.reports[sourceName][spellName];
-					local lastTime = 0;
-					if lastReport then
-						lastTime = lastReport.time;
-					end
-					
-					RankWatchSettings.reports[sourceName][spellName] = { time = timestamp, lowId = spellId, maxId = maxRankId };
+		local maxRankId = spellId
+		local maxRankData = spellData
+		while (maxRankData.next and RankWatch_RankData[maxRankData.next].level <= sourceLevel) do
+			maxRankId = maxRankData.next
+			maxRankData = RankWatch_RankData[maxRankData.next]
+		end
 
-					if (timestamp - lastTime > RankWatchSettings.interval) then
-						RankWatch_SendReport(sourceName, spellId, maxRankId, timestamp, isFirstTime)
-					end
-				end
-			end
+		-- Some spells are downranked for legitimate reasons. Don't report these spells.
+		if (spellData.rank == 1 and RankWatch_Rank1_Allowed[spellName])
+				or (spellData.rank == maxRankData.rank - 1 and RankWatch_RankMaxMinusOne_Allowed[spellName])
+				or RankWatch_AnyRank_Allowed[spellName] then
+			return
+		end
+		if maxRankId == spellId then return end
+
+		-- Don't report players who leveled up during this session, they may not have visited a trainer yet
+		local levelSeen = session.levelSeen[sourceName]
+		if not levelSeen then
+			session.levelSeen[sourceName] = casterLevel
+		elseif casterLevel > levelSeen then
+			return
+		end
+
+		local suppress = RankWatchSettings.ignore[sourceName:lower()] and true or false
+		if RankWatch_HandleDetection(sourceName, casterLevel, spellId, maxRankId, suppress) then
+			SendComm("REPORT\t" .. sourceName .. "\t" .. casterLevel .. "\t" .. spellId .. "\t" .. maxRankId .. "\t" .. (suppress and "1" or "0"))
 		end
 	end
 end
@@ -446,7 +655,7 @@ end
 function RankWatch_Report()
 	local seenSpells = false
 	local lastSeenName = ""
-	
+
 	for sourceName, spells in pairs(RankWatchSettings.reports) do
 		for spellName, spellData in pairs(spells) do
 			if spellData.lowId then
@@ -488,7 +697,7 @@ end
 function RankWatch_Watch(player)
 	local p = player:lower()
 	if (RankWatchSettings.ignore[p]) then
-		RankWatchSettings.ignore[p] = false
+		RankWatchSettings.ignore[p] = nil
 		chat(string.format(L["PLAYER_NOW_WATCHED"],player))
 	else
 		chat(string.format(L["PLAYER_ALREADY_WATCHED"], player))
@@ -498,7 +707,7 @@ end
 function RankWatch_ReportIgnoreList()
 	local seenAny = false
 	local s = L["IGNORED_PLAYERS"]
-	
+
 	for player, isIgnored in pairs(RankWatchSettings.ignore) do
 		if isIgnored then
 			if seenAny then
@@ -506,7 +715,7 @@ function RankWatch_ReportIgnoreList()
 			else
 				seenAny = true
 			end
-			
+
 			-- the value used to be a boolean, if it's a string, then that's the player's name as entered.
 			if type(isIgnored) == "string" then
 				s = s .. isIgnored
@@ -522,75 +731,9 @@ function RankWatch_ReportIgnoreList()
 	end
 end
 
-function RankWatch_SendReport(sourceName, lowRankSpellId, maxRankSpellId, timestamp, isFirstTime)
-	if (RankWatchSettings.enabled) then
-	
-		local lowRankName, lowRank = RankWatch_GetSpellInfo(lowRankSpellId)
-		local maxRankName, maxRank = RankWatch_GetSpellInfo(maxRankSpellId)
-		local spellLevel = RankWatch_RankData[maxRankSpellId].level
-		
-		if not RankWatchSettings.ignore[sourceName:lower()] then
-			if lowRankName == maxRankName then
-				chat(string.format(L["LOCAL_SPELL_LOW"],sourceName,lowRankName,lowRank,spellLevel,maxRank,date(L["DATE_FORMAT"], timestamp)));
-			else
-				chat(string.format(L["LOCAL_SPELL_REPLACED"],sourceName,lowRankName,lowRank,spellLevel,maxRankName,maxRank,date(L["DATE_FORMAT"], timestamp)));
-			end
-		end
-
-		-- if we're not in a party or raid, then it's just us, that's all we have to do.
-		local channel = RankWatch_GetPartyType()
-		if not channel then return end
-		
-	-- Send out a message to notify other rankwatch users that we have observed a downranked spell
-	-- this is done to prevent multiple whispers
-	-- Cases:
-	--   priority RANKWATCH_PRIORITY_IS_ME: we noticed that I have downranked - no other user should whisper me
-	--   priority RANKWATCH_PRIORITY_IGNORE: we noticed that a user I have on ignore has downranked - no one should whisper this user
-	--   If the user is not me and not ignored, and channel is set, then we pick a random priority from 1 to RANKWATCH_PRIORITY_MAX
-	--   If we receive a message from another user with a higher priority (or special cases RANKWATCH_PRIORITY_IS_ME or RANKWATCH_PRIORITY_IGNORE)
-	--      then we will not whisper (making the assumption that the other user will).
-	--   If we don't receive a message from another user with a higher priority within 3 seconds,
-	--      then we will send the whisper ourselves.
-	
-		local priority = math.random(RANKWATCH_PRIORITY_MAX)
-		if sourceName == UnitName("player") then
-			priority = RANKWATCH_PRIORITY_IS_ME
-		elseif RankWatchSettings.ignore[sourceName:lower()] then
-			priority = RANKWATCH_PRIORITY_IGNORE
-		end
-		
-		-- If it's me or an ignored user, we always want to tell other rankwatchers.
-		-- Otherwise, if we're not going to send a whisper ourselves, we don't need to
-		-- tell them
-		if (priority > RANKWATCH_PRIORITY_MAX or RankWatchSettings.channel) then
-			if (priority <= RANKWATCH_PRIORITY_MAX) then
-				if not queuedReports[sourceName] then
-					queuedReports[sourceName] = { }
-				end
-				
-				-- if there's already a queued report for this spell and user, it's because some other user has
-				-- noticed it and already sent out the message. Let them deal with it.
-				if queuedReports[sourceName][lowRankName] then
-					priority = -1
-				else
-					queuedReports[sourceName][lowRankName] = {
-						priority = priority, time = timestamp, lowId = lowRankSpellId, maxId = maxRankSpellId,
-						isFirstTime = isFirstTime, isMine = true, qtime = GetTime(), sender = "player"
-					}
-				end
-			end
-
-			if priority >= 0 then
-				local s = sourceName .. "\t" .. lowRankName .. "\t" .. lowRank .. "\t" .. maxRank .. "\t" .. timestamp .. "\t" .. tostring(isFirstTime) .. "\t" .. priority
-				SendAddonMessage("RankWatch", s, channel)
-			end
-		end
-	end
-end
-
-function RankWatch_Whisper(sourceName, spellName, lowId, maxId, timestamp, isFirstTime)
-	if (RankWatchSettings.channel
-		and (UnitLevel(sourceName) == 80 or RankWatchSettings.levels == RANKWATCH_WHISPER_ALL)
+function RankWatch_Whisper(sourceName, lowId, maxId)
+	if (RankWatchSettings.enabled and RankWatchSettings.channel
+		and (UnitLevel(sourceName) == MAX_LEVEL or RankWatchSettings.levels == RANKWATCH_WHISPER_ALL)
 		and sourceName ~= UnitName("player")) then
 
 		local channel = "WHISPER"
@@ -606,15 +749,18 @@ function RankWatch_Whisper(sourceName, spellName, lowId, maxId, timestamp, isFir
 
 		if channel then
 			if lowRankName == maxRankName then
-				SendChatMessage(string.format(L["WHISPER_SPELL_LOW_WARNING"], sourceName, spellName, lowRank, spellLevel, maxRank),
+				SendChatMessage(string.format(L["WHISPER_SPELL_LOW_WARNING"], sourceName, lowRankName, lowRank, spellLevel, maxRank),
 					channel, nil, sourceName)
 			else
-				SendChatMessage(string.format(L["WHISPER_SPELL_REPLACED_WARNING"], sourceName, spellName, lowRank, spellLevel, maxRankName, maxRank),
+				SendChatMessage(string.format(L["WHISPER_SPELL_REPLACED_WARNING"], sourceName, lowRankName, lowRank, spellLevel, maxRankName, maxRank),
 					channel, nil, sourceName)
 			end
 		end
-		
-		if (isFirstTime and RankWatchSettings.explain) then
+
+		-- The explanation is only sent along with whispers, not to /say or group chat
+		local key = sourceName:lower()
+		if channel == "WHISPER" and RankWatchSettings.explain and not RankWatchSettings.explained[key] then
+			RankWatchSettings.explained[key] = true
 			SendChatMessage(string.format(L["WHISPER_BOILERPLATE_PART1"], maxRankName, maxRank), "WHISPER", nil, sourceName)
 			SendChatMessage(L["WHISPER_BOILERPLATE_PART2"], "WHISPER", nil, sourceName)
 		end

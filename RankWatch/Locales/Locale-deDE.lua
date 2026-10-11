@@ -68,4 +68,9 @@ L["WHISPER_BOILERPLATE_PART1"] = "Wenn du %s Rang %d gelernt hast, stelle bitte 
 L["WHISPER_BOILERPLATE_PART2"] = "Wenn es Absicht ist einen niedrigeren Rang zu nutzen, tut es mir leid. Bitte sage mir Bescheid und ich stelle sicher, dass RankWatch dir keine Nachrichten mehr schickt."
 L["WHISPER_SPELL_LOW_WARNING"] = "[RankWatch] %s benutzte %s Rang %d. Max Rang auf Level %d ist %d."
 L["WHISPER_SPELL_REPLACED_WARNING"] = "[RankWatch] %s benutzte %s Rang %d. Der Zauber wird auf Level %d durch %s Rang %d ersetzt."
+L["USAGE_LEAD"] = "   /rankwatch lead            - Macht dich zum Flüster-Lead der Gruppe (nur der Lead flüstert)"
+L["CURRENT_LEAD"] = "Flüster-Lead dieser Gruppe: %s"
+L["NO_LEAD"] = "Kein RankWatch-Nutzer in dieser Gruppe flüstert."
+L["LEAD_TAKEN"] = "Du bist jetzt der Flüster-Lead dieser Gruppe."
+L["LEAD_UNAVAILABLE"] = "Du kannst nicht Lead sein, solange RankWatch deaktiviert oder auf 'none' gestellt ist."
 

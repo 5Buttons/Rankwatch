@@ -1,13 +1,13 @@
 Description
 -----------
-RankWatch will monitor the spells cast by you and other level 80 members of your party
+RankWatch will monitor the spells cast by you and other members of your party
 or raid and warn them if they are using a downranked spell.
 
 While downranked spells were formerly used to save mana, this use is no longer supported,
 and while it is occasionally intended, the use of downranked spells is generally a mistake.
 Sometimes this happens when people forget to train at level 80, sometimes it happens when
 they spend talent points to obtain a spell which is not a base skill for the class (for
-example, a Death Knight's Frost Strike our Scourge Strike) but fail to train the ranks
+example, a Death Knight's Frost Strike or Scourge Strike) but fail to train the ranks
 for the newly talented spell. In my experience, the most common cause is training while
 dual specced. For example, if you level up as a feral druid, you will train new ranks of
 Rejuvenation etc, but the new ranks will not appear on your bars when you change to the
@@ -18,7 +18,8 @@ is often used by warlocks to proc the Glyph and stack trinkets, and Health Funne
 health at lower ranks. Polymorph is sometimes downranked to control the duration, for example,
 when a player is mind controlled. Rank 1 Frostbolt is used in pvp for the snare effect since
 its cast time is shorter. Two different ranks of Flamestrike may be alternated to allow stacking
-ground DOTs.  Occasionally (Anub'arak in ToC for example) healers may down rank to control
+ground DOTs, and the same goes for Explosive Trap. Rank 1 Mana Shield, Shadow Bolt, Hellfire
+and Amplify/Dampen Magic are not reported either.  Occasionally (Anub'arak in ToC for example) healers may down rank to control
 the amount of healing, I suggest you simply disable the addon for this fight.  If you know
 of other valid uses of downranked spells, please let me know.
 
@@ -37,11 +38,26 @@ levels of folders.
 
 Usage
 -----
-Once installed RankWatch will whisper level 80 players who are observed to be using
-downranked spells other than the special cases noted above.  The first whisper to any
+Once installed RankWatch will whisper members of your party or raid who are observed to be
+using downranked spells other than the special cases noted above.  The first whisper to any
 player will include a couple of lines of explanation.  Thereafter, each observed spell
-will result in a one-line message.  No spell will be reported more often than once
-every 60 seconds.
+will result in a one-line message.
+
+ * Only party and raid members are checked. Battlegrounds, mind controlled or charmed
+   players are skipped.
+ * Each ability is reported at most once per player per session, and a given rank is
+   never reported twice for the same player at the same level.
+ * Whispers are held back until both you and the player are out of combat.
+ * Leveling players get some slack before a new rank is reported (3 levels below 20,
+   2 levels below 70, 1 level below 80), and players who level up during your session
+   are not reported until the next session.
+ * Spells cast on group members more than 8 levels below the caster are not checked.
+
+If several group members run RankWatch, only one of them - the whisper lead - sends
+whispers, and they share what they see, so nobody receives the same message twice.
+The lead is chosen automatically; use "/rankwatch lead" to take over. Players who run
+RankWatch themselves are never whispered, their own copy tells them. RankWatch 1.10 does
+not talk to older versions.
 
 A few commands are available by typing /rankwatch in the chat input:
    /rankwatch enable          - enables RankWatch
@@ -56,10 +72,10 @@ A few commands are available by typing /rankwatch in the chat input:
    /rankwatch none            - report downranked spells only in your chat window
    /rankwatch explain enable  - first-time whispers include a short explanation
    /rankwatch explain disable - first-time whispers will not include a short explanation
-   /rankwatch interval <seconds> - minimum time between whispers to the same person regarding the same spell
    /rankwatch ignore          - list players on the ignore list
    /rankwatch ignore <name>   - never report spells cast by that player
    /rankwatch watch <name>    - no longer ignore spells cast by that player
+   /rankwatch lead            - make yourself the group's whisper lead
 
 To Do
 -----
@@ -159,3 +175,18 @@ Don't put a message in local chat when the downranking user is on the ignore lis
 Add Power Word: Shield to the list of spells determined by minimum of target level and caster level
 Fix times in "/rankwatch report" output
 Fix a problem in code designed to prevent double whispers when there are multiple rankwatch users in the group
+
+Release 1.10
+11 October 2026
+
+Detection and notification logic adapted from RankSentinel:
+Only check casts by party/raid members; skip battlegrounds and mind controlled, charmed or hostile players.
+Report each ability once per player per session, and each rank only once per player and level (saved).
+Hold whispers until you and the player are out of combat.
+One whisper lead per group; RankWatch users share their observations. New "/rankwatch lead" command.
+Not compatible with the group communication of older versions.
+Level slack for leveling players; don't report players who leveled up during the session.
+Don't check spells cast on group members more than 8 levels below the caster.
+Removed "/rankwatch interval".
+The first-time explanation is only sent in whisper mode.
+Don't report rank 1 Mana Shield and Shadow Bolt, or Explosive Trap one rank below the maximum.

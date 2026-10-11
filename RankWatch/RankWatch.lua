@@ -32,7 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 local L = LibStub("AceLocale-3.0"):GetLocale("RankWatch")
 
-local RankWatch_Version = "v1.09"
+local RankWatch_Version = "v1.10"
 
 local RANKWATCH_CHANNEL_DISABLED = false
 local RANKWATCH_CHANNEL_PARTY = 1
